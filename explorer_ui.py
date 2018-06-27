@@ -33,13 +33,13 @@ regex = [
     ("WEB_FILE",r'"([^"\s]+\.(?:js|css|html|php)+)"', True),
     ("LINK",r'"([a-zA-Z]+://[^"\s]+)"', False),
     ("IMG",r'"([^"\s]+\.(?:png|jpg|gif))"', False),
-    ("STATIC_FILE",r'"([^">\s]+\.[a-zA-Z0-9]+)"', False),
+    #("STATIC_FILE",r'"([^">\s]+\.[a-zA-Z0-9]+)"', False),
     ("AJAX_GET",r'(?:href=|get\()"([^">\s]+\?[^"]+)"', True),
     ("AJAX_FUNC",r'(?:put|get|post|ajax)\(\s*"([^"\s]+)"\s*,[^\)]+\)', True), # ajaxFunc    (    "..."
     ("PAGES",r'"(/[^">\s\.\?]+)"', True),
     ("URL",r'"(/[^">\s]+)"', True),
-    ("HREF",r'href="([^>\s]+)"', True),
-    ("SRC",r'src="([^>\s]+)"', True),
+    #("HREF",r'href="([^>\s]+)"', True),
+    #("SRC",r'src="([^>\s]+)"', True),
 ]
 
 
@@ -142,7 +142,10 @@ class BurpExtender(IBurpExtender, ITab):
                         # 
                         #url = concatURL(baseURL,i)
                         #url = concatURL(host,i)
-                        url = host + i
+                        if i.find('http://') == 0 or i.find('https://') == 0 :
+                            url = i
+                        else :
+                            url = host + i
                         #print(host,i,url)
                         if url not in pageType :
                             pageType[url] = name
@@ -166,7 +169,7 @@ class BurpExtender(IBurpExtender, ITab):
                     pageContentHash[hash] = [url]
                 
                 toRet += matchRegex(url,r)
-            except Exception as e :
+            except BaseException as e :
                 print("Error while making request to ",url,e)
             return toRet
                 
