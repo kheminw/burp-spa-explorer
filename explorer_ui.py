@@ -12,7 +12,9 @@ try:
                              JTextField, JLabel, SwingConstants)
     from javax.swing.table import AbstractTableModel
     from java.awt import GridLayout
-
+    
+    from java.net import URL
+    
     from thread import start_new_thread
 
     import re
@@ -28,31 +30,17 @@ pageType = {} # url -> type
 pageContentHash = {} # hash -> url list
 
 regex = [
-    ("LINK",r'"([a-zA-Z]+://[^"]+)"', -1, False),
-    ("IMG",r'"([^"/]*/[^">]+\.(png|jpg|gif))"', 0, False),
-    ("FILE",r'"([^"/]*/[^">]+\.[a-zA-Z0-9]+)"', -1, True),
-    ("AJAX_GET",r'(href=|get\()"([^"]*\?[^"]+)"', 1, True),
-    ("AJAX_FUNC",r'(put|get|post|ajax)\("([^"/]*/[^"]+)"', 1, True), # ajaxFunc    (    "..."
-    ("PAGES",r'"(/[^">\.\?]+)"', -1, True),
-    ("HREF",r'href="([^"]+)"', -1, False),
+    ("WEB_FILE",r'"([^"\s]+\.(?:js|css|html|php)+)"', True),
+    ("LINK",r'"([a-zA-Z]+://[^"\s]+)"', False),
+    ("IMG",r'"([^"\s]+\.(?:png|jpg|gif))"', False),
+    ("STATIC_FILE",r'"([^">\s]+\.[a-zA-Z0-9]+)"', False),
+    ("AJAX_GET",r'(?:href=|get\()"([^">\s]+\?[^"]+)"', True),
+    ("AJAX_FUNC",r'(?:put|get|post|ajax)\(\s*"([^"\s]+)"\s*,[^\)]+\)', True), # ajaxFunc    (    "..."
+    ("PAGES",r'"(/[^">\s\.\?]+)"', True),
+    ("URL",r'"(/[^">\s]+)"', True),
+    ("HREF",r'href="([^>\s]+)"', True),
+    ("SRC",r'src="([^>\s]+)"', True),
 ]
-
-def matchRegex(res) :
-    toRet = []
-    for (name,regStr,groupNo, ret) in regex :
-        matchObj =  re.findall( regStr, res, re.M|re.I)
-        #print("MATCH",regStr,res[:40],matchObj)
-        for i in matchObj :
-            if not isinstance(i,unicode) :
-                url = i[groupNo]
-            else :
-                url = i
-            #print(url[:40],name)
-            if url not in pageType :
-                pageType[url] = name
-                if ret :
-                    toRet.append(url)
-    return toRet
 
 
 class BurpExtender(IBurpExtender, ITab):
@@ -71,12 +59,8 @@ class BurpExtender(IBurpExtender, ITab):
         self.setupPanel = JPanel(GridLayout(0, 2))
 
         self.hostField = JTextField('', 15)
-        self.setupPanel.add(JLabel("Host:", SwingConstants.LEFT))
+        self.setupPanel.add(JLabel("Target:", SwingConstants.LEFT))
         self.setupPanel.add(self.hostField)
-        
-        self.portField = JTextField('', 15)
-        self.setupPanel.add(JLabel("Port:", SwingConstants.LEFT))
-        self.setupPanel.add(self.portField)
 
         self.regexField = JTextField('', 15)
         self.setupPanel.add(JLabel("Regex:", SwingConstants.LEFT))
@@ -88,7 +72,7 @@ class BurpExtender(IBurpExtender, ITab):
 
         self._splitpane.setTopComponent(self.setupPanel)
 
-        self.logger = Logger(["Hello", "World", "Burp", "SPA", "Explorer"])
+        self.logger = Logger([])
         self.logTable = Table(self.logger)
         self.scrollPane = JScrollPane(self.logTable)
         self._splitpane.setBottomComponent(self.scrollPane)
@@ -109,40 +93,84 @@ class BurpExtender(IBurpExtender, ITab):
         return self._splitpane
 
     def crawl(self, event):
-        start_new_thread(self.crawl_thread,(self.hostField.text,int(self.portField.text)))
+        start_new_thread(self.crawl_thread,(self.hostField.text,))
 
-    def makeRequest(self,host,port,page):
+    def makeRequest(self,url):
         
-        #print("Request",host,port,page)
+        url = URL(url)
+        
+        if not self._callbacks.isInScope(url) :
+            raise ValueError("URL is out of scope")
+        
+        prot = url.getProtocol()
+        host = url.getHost()
+        port = url.getPort()
+        
+        httpService = self._helpers.buildHttpService(host,port,prot)
+        
+        
+        
+        #print("Request",prot,host,port)
 
-        page2 = page
+        reqRes = self._callbacks.makeHttpRequest(httpService,self._helpers.buildHttpRequest(url))
+        resp = reqRes.getResponse()
+        respInfo = self._helpers.analyzeResponse(resp)
         
-        resp = self._callbacks.makeHttpRequest(host,port,False,bytearray((u"GET /"+page2+u" HTTP/1.1\r\n\r\n").encode('utf-8')))
-        resp = self._helpers.bytesToString(resp)
+        respBody = self._helpers.bytesToString(resp[respInfo.getBodyOffset():])
+        
         #resp = 'GG\r\n\r\n'
-        #print("Response",resp)
-
-        return resp[resp.find('\r\n\r\n')+4:]
-
-    def crawl_thread(self,host,port):
-        print("Thread begin")
+        #print("Response",respInfo.getStatusCode(),respBody)
+        
+        return respBody
+    
+    
+    
+    def crawl_thread(self,host):
+        self.logger.addRow("Target: "+host)
         #self.logger.addRow(self.makeRequest(self.hostField.text,int(self.portField.text),'/'))
                 
-        def getAllLink(page) :
+        # http://192.168.142.10:3000
+        def concatURL(baseURL,link) :
+            return URL(URL(baseURL),link).toString();
+        
+        def matchRegex(baseURL,res) :
             toRet = []
-            r = self.makeRequest(host,port,page)
-            hash = hashlib.sha256(r.encode('utf-8')).hexdigest()
-            #print(r.text)
-            if hash in pageContentHash :
-                #print("Content hash is the same as ",pageContentHash[hash][0])
-                pageContentHash[hash].append(page)
-            else :
-                pageContentHash[hash] = [page]
-            
-            toRet += matchRegex(r)
+            for (name,regStr, ret) in regex :
+                matchObj =  re.findall( regStr, res, re.M|re.I)
+                for i in matchObj :
+                    try :
+                        # 
+                        #url = concatURL(baseURL,i)
+                        #url = concatURL(host,i)
+                        url = host + i
+                        #print(host,i,url)
+                        if url not in pageType :
+                            pageType[url] = name
+                            if ret :
+                                toRet.append(url)
+                    except :
+                        print("Some error happened ...")
+            return toRet
+        
+        def getAllLink(url) :
+            toRet = []
+            try :
+                r = self.makeRequest(url)
+                hash = hashlib.sha256(r.encode('utf-8')).hexdigest()
+                #print(r.text)
+                if hash in pageContentHash :
+                    print("Content hash is the same as ",pageContentHash[hash][0])
+                    pageContentHash[hash].append(url)
+                    return toRet
+                else :
+                    pageContentHash[hash] = [url]
+                
+                toRet += matchRegex(url,r)
+            except Exception as e :
+                print("Error while making request to ",url,e)
             return toRet
                 
-        crawledPage = [u'/']
+        crawledPage = [host]
         crawledNow = 0
         
 
@@ -163,7 +191,7 @@ class BurpExtender(IBurpExtender, ITab):
             output.append((pageType[i],i))
 
         for i in sorted(output) :
-            #self.logger.addRow(i[0]+" "+i[1])
+            self.logger.addRow(i[0]+" "+i[1])
             pass
 
 
