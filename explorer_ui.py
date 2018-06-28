@@ -10,8 +10,10 @@ try:
     from java.io import PrintWriter
     from java.lang import Runnable
     from javax.swing import (JTable, JScrollPane, JSplitPane, JButton, JPanel,
-                             JTextField, JLabel, SwingConstants,
-                             SwingUtilities)
+                             JTextField, JLabel, SwingConstants, JDialog, JCheckBox,
+                             SwingUtilities, JOptionPane)
+    
+    from javax.swing.border import EmptyBorder
     from javax.swing.table import AbstractTableModel
     from java.awt import GridLayout
     from java.net import URL
@@ -30,14 +32,11 @@ regex = [
     ("WEB_FILE", r'"([^"\s]+\.(?:js|css|html|php)+)"', True),
     ("LINK", r'"([a-zA-Z]+://[^"\s]+)"', False),
     ("IMG", r'"([^"\s]+\.(?:png|jpg|gif))"', False),
-    #("STATIC_FILE",r'"([^">\s]+\.[a-zA-Z0-9]+)"', False),
     ("AJAX_GET", r'(?:href=|get\()"([^">\s]+\?[^"]+)"', True),
     ("AJAX_FUNC", r'(?:put|get|post|ajax)\(\s*"([^"\s]+)"\s*,[^\)]+\)',
      True),  # ajaxFunc    (    "..."
     ("PAGES", r'"(/[^">\s\.\?]+)"', True),
     ("URL", r'"(/[^">\s]+)"', True),
-    #("HREF",r'href="([^>\s]+)"', True),
-    #("SRC",r'src="([^>\s]+)"', True),
 ]
 
 
@@ -115,9 +114,77 @@ class BurpExtender(IBurpExtender, ITab):
     # Button Actions
 
     def addRegex(self, event):
-        return self.regexTableModel.addRow(["TEST", "/MyRegEx/", True])
+        optionPane = JOptionPane()
+        dialog = optionPane.createDialog(self._splitpane, "Add RegEx")
+
+        panel = JPanel(GridLayout(0, 2))
+        panel.setBorder(EmptyBorder(10,10,10,10))
+
+        nameField = JTextField('', 15)
+        panel.add(JLabel("Name:", SwingConstants.LEFT))
+        panel.add(nameField)
+
+        regexField = JTextField('', 15)
+        panel.add(JLabel("RegEx:", SwingConstants.LEFT))
+        panel.add(regexField)
+
+        crawlField = JCheckBox()
+        panel.add(JLabel("Crawl:", SwingConstants.LEFT))
+        panel.add(crawlField)
+
+        def closeDialog(event) :
+            self.regexTableModel.addRow([nameField.text, regexField.text, crawlField.isSelected()])
+            dialog.hide()
+
+        addButton = JButton('Add', actionPerformed=closeDialog)
+        panel.add(addButton)
+
+        dialog.setSize(600,200)
+        dialog.setContentPane(panel)
+        self._callbacks.customizeUiComponent(dialog)
+        dialog.show()
+
+        return True
 
     def editRegex(self, event):
+        selectedRowIdx = self.regexTable.getSelectedRow()
+        if selectedRowIdx == -1 : return False
+        selectedRow = self.regexTableModel.data[selectedRowIdx]
+
+
+        optionPane = JOptionPane()
+        dialog = optionPane.createDialog(self._splitpane, "Edit RegEx")
+
+        panel = JPanel(GridLayout(0, 2))
+        panel.setBorder(EmptyBorder(10,10,10,10))
+
+        nameField = JTextField('', 15)
+        nameField.text = selectedRow[0]
+        panel.add(JLabel("Name:", SwingConstants.LEFT))
+        panel.add(nameField)
+
+        regexField = JTextField('', 15)
+        regexField.text = selectedRow[1]
+        panel.add(JLabel("RegEx:", SwingConstants.LEFT))
+        panel.add(regexField)
+
+        crawlField = JCheckBox()
+        crawlField.setSelected(selectedRow[2])
+        panel.add(JLabel("Crawl:", SwingConstants.LEFT))
+        panel.add(crawlField)
+
+        def closeDialog(event) :
+            self.regexTableModel.editRow(selectedRowIdx, [nameField.text, regexField.text, crawlField.isSelected()])
+            dialog.hide()
+
+        editButton = JButton('Edit', actionPerformed=closeDialog)
+        panel.add(editButton)
+
+        dialog.setSize(600,200)
+        dialog.setContentPane(panel)
+        self._callbacks.customizeUiComponent(dialog)
+        dialog.show()
+
         return True
 
     def removeRegex(self, event):
@@ -206,7 +273,7 @@ class BurpExtender(IBurpExtender, ITab):
 
         def matchRegex(baseURL, res):
             toRet = []
-            for (name, regStr, ret) in regex:
+            for (name, regStr, ret) in self.regexTableModel.data:
                 matchObj = re.findall(regStr, res, re.M | re.I)
                 for i in matchObj:
                     try:
@@ -222,6 +289,7 @@ class BurpExtender(IBurpExtender, ITab):
                         #print(host,i,url)
                         if url not in pageType:
                             pageType[url] = name
+                            self.logger.addRow("Found ["  +name + "] " + url)
                             if ret:
                                 toRet.append(url)
                     except:
@@ -255,7 +323,7 @@ class BurpExtender(IBurpExtender, ITab):
         while crawledNow < len(crawledPage):
             if self.crawlingEvent.is_set():
                 print("Crawling", crawledPage[crawledNow])
-                self.logger.addRow(crawledPage[crawledNow])
+                self.logger.addRow("Crawling " + crawledPage[crawledNow])
                 for i in getAllLink(crawledPage[crawledNow]):
                     if i not in crawledPage:
                         print("ADD:", i)
@@ -268,12 +336,12 @@ class BurpExtender(IBurpExtender, ITab):
         print(crawledNow, crawledPage)
         output = []
 
-        for i in pageType:
-            output.append((pageType[i], i))
+        # for i in pageType:
+        #    output.append((pageType[i], i))
 
-        for i in sorted(output):
-            self.logger.addRow(i[0] + " " + i[1])
-            pass
+        # for i in sorted(output):
+        #     self.logger.addRow(i[0] + " " + i[1])
+        #     pass
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Start crawling", )))
@@ -342,6 +410,10 @@ class RegexTableModel(AbstractTableModel):
     def addRow(self, row):
         self.data.append(row)
         self.fireTableRowsInserted(len(self.data) - 1, len(self.data) - 1)
+
+    def editRow(self, rowIdx, row):
+        self.data[rowIdx] = row
+        self.fireTableRowsUpdated(rowIdx, rowIdx)
 
     def removeRow(self, row):
         self.data.pop(row)
