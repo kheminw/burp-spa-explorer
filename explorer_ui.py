@@ -10,12 +10,12 @@ try:
     from java.io import PrintWriter
     from java.lang import Runnable
     from javax.swing import (JTable, JScrollPane, JSplitPane, JButton, JPanel,
-                             JTextField, JLabel, SwingConstants, JDialog, JCheckBox,
-                             SwingUtilities, JOptionPane)
-    
+                             JTextField, JLabel, SwingConstants, JDialog,
+                             JCheckBox, SwingUtilities, JOptionPane, BoxLayout)
+
     from javax.swing.border import EmptyBorder
     from javax.swing.table import AbstractTableModel
-    from java.awt import GridLayout
+    from java.awt import (GridLayout, BorderLayout, FlowLayout, Dimension)
     from java.net import URL
 
     from threading import Thread, Event
@@ -52,20 +52,19 @@ class BurpExtender(IBurpExtender, ITab):
 
         # main split pane
         self._splitpane = JSplitPane(JSplitPane.VERTICAL_SPLIT)
+        self._splitpane.setBorder(EmptyBorder(20, 20, 20, 20))
 
         # sub split pane (top)
 
-        self._topSplitpane = JSplitPane(JSplitPane.HORIZONTAL_SPLIT)
+        self._topPanel = JPanel(BorderLayout(10, 10))
+        self._topPanel.setBorder(EmptyBorder(0, 0, 10, 0))
 
-        self.setupPanel = JPanel(GridLayout(0, 2))
+        self.setupPanel = JPanel(FlowLayout(FlowLayout.LEADING, 10, 10))
 
-        self.hostField = JTextField('', 15)
-        self.setupPanel.add(JLabel("Target:", SwingConstants.LEFT))
+        self.hostField = JTextField('', 50)
+        self.setupPanel.add(
+            JLabel("Target:", SwingConstants.LEFT), BorderLayout.LINE_START)
         self.setupPanel.add(self.hostField)
-
-        # self.regexField = JTextField('', 15)
-        # self.setupPanel.add(JLabel("Regex:", SwingConstants.LEFT))
-        # self.setupPanel.add(self.regexField)
 
         self.crawlingEvent = Event()
 
@@ -73,11 +72,13 @@ class BurpExtender(IBurpExtender, ITab):
             'Start crawling', actionPerformed=self.toggleCrawl)
 
         self.setupPanel.add(self.toggleButton)
-        self._topSplitpane.setLeftComponent(self.setupPanel)
+        self._topPanel.add(self.setupPanel, BorderLayout.PAGE_START)
 
         self.optionsPanel = JPanel(GridLayout(0, 2))
 
-        self.buttonOptionsPanel = JPanel(GridLayout(0, 1))
+        self.buttonOptionsPanel = JPanel()
+        self.buttonOptionsPanel.setLayout(
+            BoxLayout(self.buttonOptionsPanel, BoxLayout.PAGE_AXIS))
         self.addRegexButton = JButton('Add', actionPerformed=self.addRegex)
         self.editRegexButton = JButton('Edit', actionPerformed=self.editRegex)
         self.removeRegexButton = JButton(
@@ -94,14 +95,16 @@ class BurpExtender(IBurpExtender, ITab):
 
         self.optionsPanel.add(self.regexScrollPane)
 
-        self._topSplitpane.setRightComponent(self.optionsPanel)
+        self._topPanel.add(self.optionsPanel, BorderLayout.CENTER)
 
-        self._splitpane.setTopComponent(self._topSplitpane)
+        self._splitpane.setTopComponent(self._topPanel)
 
         self.logger = Logger([])
         self.logTable = Table(self.logger)
         self.scrollPane = JScrollPane(self.logTable)
         self._splitpane.setBottomComponent(self.scrollPane)
+        self._splitpane.setDividerLocation(300 +
+                                           self._splitpane.getInsets().left)
 
         callbacks.customizeUiComponent(self.scrollPane)
         callbacks.customizeUiComponent(self.setupPanel)
@@ -118,7 +121,7 @@ class BurpExtender(IBurpExtender, ITab):
         dialog = optionPane.createDialog(self._splitpane, "Add RegEx")
 
         panel = JPanel(GridLayout(0, 2))
-        panel.setBorder(EmptyBorder(10,10,10,10))
+        panel.setBorder(EmptyBorder(10, 10, 10, 10))
 
         nameField = JTextField('', 15)
         panel.add(JLabel("Name:", SwingConstants.LEFT))
@@ -132,14 +135,16 @@ class BurpExtender(IBurpExtender, ITab):
         panel.add(JLabel("Crawl:", SwingConstants.LEFT))
         panel.add(crawlField)
 
-        def closeDialog(event) :
-            self.regexTableModel.addRow([nameField.text, regexField.text, crawlField.isSelected()])
+        def closeDialog(event):
+            self.regexTableModel.addRow(
+                [nameField.text, regexField.text,
+                 crawlField.isSelected()])
             dialog.hide()
 
         addButton = JButton('Add', actionPerformed=closeDialog)
         panel.add(addButton)
 
-        dialog.setSize(600,200)
+        dialog.setSize(600, 200)
         dialog.setContentPane(panel)
         self._callbacks.customizeUiComponent(dialog)
         dialog.show()
@@ -148,15 +153,14 @@ class BurpExtender(IBurpExtender, ITab):
 
     def editRegex(self, event):
         selectedRowIdx = self.regexTable.getSelectedRow()
-        if selectedRowIdx == -1 : return False
+        if selectedRowIdx == -1: return False
         selectedRow = self.regexTableModel.data[selectedRowIdx]
-
 
         optionPane = JOptionPane()
         dialog = optionPane.createDialog(self._splitpane, "Edit RegEx")
 
         panel = JPanel(GridLayout(0, 2))
-        panel.setBorder(EmptyBorder(10,10,10,10))
+        panel.setBorder(EmptyBorder(10, 10, 10, 10))
 
         nameField = JTextField('', 15)
         nameField.text = selectedRow[0]
@@ -173,14 +177,17 @@ class BurpExtender(IBurpExtender, ITab):
         panel.add(JLabel("Crawl:", SwingConstants.LEFT))
         panel.add(crawlField)
 
-        def closeDialog(event) :
-            self.regexTableModel.editRow(selectedRowIdx, [nameField.text, regexField.text, crawlField.isSelected()])
+        def closeDialog(event):
+            self.regexTableModel.editRow(
+                selectedRowIdx,
+                [nameField.text, regexField.text,
+                 crawlField.isSelected()])
             dialog.hide()
 
         editButton = JButton('Edit', actionPerformed=closeDialog)
         panel.add(editButton)
 
-        dialog.setSize(600,200)
+        dialog.setSize(600, 200)
         dialog.setContentPane(panel)
         self._callbacks.customizeUiComponent(dialog)
         dialog.show()
@@ -289,7 +296,7 @@ class BurpExtender(IBurpExtender, ITab):
                         #print(host,i,url)
                         if url not in pageType:
                             pageType[url] = name
-                            self.logger.addRow("Found ["  +name + "] " + url)
+                            self.logger.addRow("Found [" + name + "] " + url)
                             if ret:
                                 toRet.append(url)
                     except:
@@ -367,7 +374,7 @@ class Logger(AbstractTableModel):
 
     def getColumnName(self, columnIndex):
         if columnIndex == 0:
-            return "Test"
+            return "Result"
         return "Column " + columnIndex
 
     def getValueAt(self, rowIndex, columnIndex):
