@@ -15,7 +15,7 @@ try:
 
     from java.net import URL
 
-    from thread import start_new_thread
+    from threading import Thread, Event
 
     import re
     import hashlib
@@ -24,10 +24,6 @@ except ImportError:
     print "Failed to load dependencies. This issue maybe caused by using an unstable Jython version."
 
 VERSION = '0.1'
-
-pageType = {}  # url -> type
-
-pageContentHash = {}  # hash -> url list
 
 regex = [
     ("WEB_FILE", r'"([^"\s]+\.(?:js|css|html|php)+)"', True),
@@ -71,9 +67,16 @@ class BurpExtender(IBurpExtender, ITab):
         # self.setupPanel.add(JLabel("Regex:", SwingConstants.LEFT))
         # self.setupPanel.add(self.regexField)
 
+        self.crawlingEvent = Event()
+        self.crawlingEvent.set()
+
         self.startButton = JButton(
             'Start crawling', actionPerformed=self.crawl)
+        self.stopButton = JButton(
+            'Stop crawling', actionPerformed=self.stopCrawling)
+
         self.setupPanel.add(self.startButton)
+        self.setupPanel.add(self.stopButton)
         self._topSplitpane.setLeftComponent(self.setupPanel)
 
         self.optionsPanel = JPanel(GridLayout(0, 2))
@@ -136,7 +139,22 @@ class BurpExtender(IBurpExtender, ITab):
         return self._splitpane
 
     def crawl(self, event):
-        start_new_thread(self.crawl_thread, (self.hostField.text, ))
+        print("Starting")
+        self.crawlingEvent.set()
+        self.crawlerThread = Thread(
+            target=self.crawl_thread, args=(self.hostField.text, ))
+        self.crawlerThread.start()
+        print("Started")
+
+    def stopCrawling(self, event):
+        if (self.crawlerThread.is_alive()):
+            print("Still alive")
+        else:
+            print("Dead")
+        self.crawlingEvent.clear()
+        print("Stopping...")
+        self.crawlerThread.join()
+        print("Crawling stopped")
 
     def makeRequest(self, url):
 
@@ -166,7 +184,13 @@ class BurpExtender(IBurpExtender, ITab):
         return respBody
 
     def crawl_thread(self, host):
+        # print(self, host)
+        print("Hello from thread")
         self.logger.addRow("Target: " + host)
+
+        pageType = {}  # url -> type
+
+        pageContentHash = {}  # hash -> url list
 
         #self.logger.addRow(self.makeRequest(self.hostField.text,int(self.portField.text),'/'))
 
@@ -199,7 +223,9 @@ class BurpExtender(IBurpExtender, ITab):
         def getAllLink(url):
             toRet = []
             try:
+                print("Making request", url)
                 r = self.makeRequest(url)
+                print("Done request", len(r))
                 hash = hashlib.sha256(r.encode('utf-8')).hexdigest()
                 #print(r.text)
                 if hash in pageContentHash:
@@ -211,22 +237,25 @@ class BurpExtender(IBurpExtender, ITab):
                     pageContentHash[hash] = [url]
 
                 toRet += matchRegex(url, r)
-            except BaseException as e:
-                print("Error while making request to ", url, e)
+            except:
+                print("Error while making request to ", url)
             return toRet
 
         crawledPage = [host]
         crawledNow = 0
 
         while crawledNow < len(crawledPage):
-            print("Crawling %s", crawledPage[crawledNow])
-            self.logger.addRow(crawledPage[crawledNow])
-            for i in getAllLink(crawledPage[crawledNow]):
-                if i not in crawledPage:
-                    print("ADD:", i)
-                    crawledPage.append(i)
-            crawledNow += 1
-            #break
+            if self.crawlingEvent.is_set():
+                print("Crawling", crawledPage[crawledNow])
+                self.logger.addRow(crawledPage[crawledNow])
+                for i in getAllLink(crawledPage[crawledNow]):
+                    if i not in crawledPage:
+                        print("ADD:", i)
+                        crawledPage.append(i)
+                crawledNow += 1
+            else:
+                print("Stop Requested")
+                break
 
         print(crawledNow, crawledPage)
         output = []
@@ -237,6 +266,8 @@ class BurpExtender(IBurpExtender, ITab):
         for i in sorted(output):
             self.logger.addRow(i[0] + " " + i[1])
             pass
+
+        print("Completed")
 
 
 class Logger(AbstractTableModel):
