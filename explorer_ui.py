@@ -89,8 +89,8 @@ class BurpExtender(IBurpExtender, ITab):
 
         self.optionsPanel.add(self.buttonOptionsPanel)
 
-        self.regexLogger = Logger([x[1] for x in regex])
-        self.regexTable = Table(self.regexLogger)
+        self.regexTableModel = RegexTableModel([x for x in regex])
+        self.regexTable = Table(self.regexTableModel)
         self.regexScrollPane = JScrollPane(self.regexTable)
 
         self.optionsPanel.add(self.regexScrollPane)
@@ -115,12 +115,16 @@ class BurpExtender(IBurpExtender, ITab):
     # Button Actions
 
     def addRegex(self, event):
-        return self.regexLogger.addRow("a")
+        return self.regexTableModel.addRow(["TEST","/MyRegEx/",True])
 
     def editRegex(self, event):
         return True
 
     def removeRegex(self, event):
+        idx = self.regexTable.getSelectedRows()
+        print(idx)
+        for i in sorted(idx)[::-1] :
+            self.regexTableModel.removeRow(i)
         return True
 
     # Implement ITab
@@ -270,8 +274,35 @@ class Logger(AbstractTableModel):
         self.fireTableRowsInserted(len(self.log) - 1, len(self.log) - 1)
 
     def removeRow(self, row):
-        self.log.pop()
-        self.fireTableRowsRemoved(len(self.log) - 1, len(self.log) - 1)
+        self.log.pop(row)
+        self.fireTableRowsDeleted(row, row)
+
+class RegexTableModel(AbstractTableModel) :
+    def __init__(self, regex):
+        self.data = regex
+
+    def getRowCount(self):
+        try:
+            return len(self.data)
+        except:
+            return 0
+
+    def getColumnCount(self):
+        return 3
+
+    def getColumnName(self, columnIndex):
+        return ["Name","RegEx","Crawl"][columnIndex]
+
+    def getValueAt(self, rowIndex, columnIndex):
+        return self.data[rowIndex][columnIndex]
+
+    def addRow(self, row):
+        self.data.append(row)
+        self.fireTableRowsInserted(len(self.data) - 1, len(self.data) - 1)
+
+    def removeRow(self, row):
+        self.data.pop(row)
+        self.fireTableRowsDeleted(row, row)
 
 
 class Table(JTable):
