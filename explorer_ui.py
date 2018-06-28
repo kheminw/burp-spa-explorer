@@ -8,11 +8,12 @@ try:
     # from array import array
     # from time import sleep
     from java.io import PrintWriter
+    from java.lang import Runnable
     from javax.swing import (JTable, JScrollPane, JSplitPane, JButton, JPanel,
-                             JTextField, JLabel, SwingConstants)
+                             JTextField, JLabel, SwingConstants,
+                             SwingUtilities)
     from javax.swing.table import AbstractTableModel
     from java.awt import GridLayout
-
     from java.net import URL
 
     from threading import Thread, Event
@@ -68,15 +69,11 @@ class BurpExtender(IBurpExtender, ITab):
         # self.setupPanel.add(self.regexField)
 
         self.crawlingEvent = Event()
-        self.crawlingEvent.set()
 
-        self.startButton = JButton(
-            'Start crawling', actionPerformed=self.crawl)
-        self.stopButton = JButton(
-            'Stop crawling', actionPerformed=self.stopCrawling)
+        self.toggleButton = JButton(
+            'Start crawling', actionPerformed=self.toggleCrawl)
 
-        self.setupPanel.add(self.startButton)
-        self.setupPanel.add(self.stopButton)
+        self.setupPanel.add(self.toggleButton)
         self._topSplitpane.setLeftComponent(self.setupPanel)
 
         self.optionsPanel = JPanel(GridLayout(0, 2))
@@ -118,7 +115,7 @@ class BurpExtender(IBurpExtender, ITab):
     # Button Actions
 
     def addRegex(self, event):
-        return self.regexTableModel.addRow(["TEST","/MyRegEx/",True])
+        return self.regexTableModel.addRow(["TEST", "/MyRegEx/", True])
 
     def editRegex(self, event):
         return True
@@ -126,7 +123,7 @@ class BurpExtender(IBurpExtender, ITab):
     def removeRegex(self, event):
         idx = self.regexTable.getSelectedRows()
         print(idx)
-        for i in sorted(idx)[::-1] :
+        for i in sorted(idx)[::-1]:
             self.regexTableModel.removeRow(i)
         return True
 
@@ -148,13 +145,18 @@ class BurpExtender(IBurpExtender, ITab):
 
     def stopCrawling(self, event):
         if (self.crawlerThread.is_alive()):
-            print("Still alive")
+            print("Stopping...")
+            self.crawlingEvent.clear()
+            self.crawlerThread.join()
+            print("Crawling stopped")
+
+    def toggleCrawl(self, event):
+        if (self.crawlingEvent.is_set()):
+            self.stopCrawling(event)
+            self.toggleButton.setText("Start crawling")
         else:
-            print("Dead")
-        self.crawlingEvent.clear()
-        print("Stopping...")
-        self.crawlerThread.join()
-        print("Crawling stopped")
+            self.crawl(event)
+            self.toggleButton.setText("Stop crawling")
 
     def makeRequest(self, url):
 
@@ -173,6 +175,7 @@ class BurpExtender(IBurpExtender, ITab):
 
         reqRes = self._callbacks.makeHttpRequest(
             httpService, self._helpers.buildHttpRequest(url))
+        self._callbacks.addToSiteMap(reqRes)
         resp = reqRes.getResponse()
         respInfo = self._helpers.analyzeResponse(resp)
 
@@ -187,6 +190,9 @@ class BurpExtender(IBurpExtender, ITab):
         # print(self, host)
         print("Hello from thread")
         self.logger.addRow("Target: " + host)
+
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.toggleButton.setText, ("Stop crawling", )))
 
         pageType = {}  # url -> type
 
@@ -209,8 +215,10 @@ class BurpExtender(IBurpExtender, ITab):
                         #url = concatURL(host,i)
                         if i.find('http://') == 0 or i.find('https://') == 0:
                             url = i
-                        else:
+                        elif i[0] == '/':
                             url = host + i
+                        else:
+                            url = host + '/' + i
                         #print(host,i,url)
                         if url not in pageType:
                             pageType[url] = name
@@ -267,6 +275,9 @@ class BurpExtender(IBurpExtender, ITab):
             self.logger.addRow(i[0] + " " + i[1])
             pass
 
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.toggleButton.setText, ("Start crawling", )))
+        self.crawlingEvent.clear()
         print("Completed")
 
 
@@ -308,7 +319,8 @@ class Logger(AbstractTableModel):
         self.log.pop(row)
         self.fireTableRowsDeleted(row, row)
 
-class RegexTableModel(AbstractTableModel) :
+
+class RegexTableModel(AbstractTableModel):
     def __init__(self, regex):
         self.data = regex
 
@@ -322,7 +334,7 @@ class RegexTableModel(AbstractTableModel) :
         return 3
 
     def getColumnName(self, columnIndex):
-        return ["Name","RegEx","Crawl"][columnIndex]
+        return ["Name", "RegEx", "Crawl"][columnIndex]
 
     def getValueAt(self, rowIndex, columnIndex):
         return self.data[rowIndex][columnIndex]
@@ -345,3 +357,12 @@ class Table(JTable):
         # show the log entry for the selected row
         # logEntry = self._extender.log[row]
         JTable.changeSelection(self, row, col, toggle, extend)
+
+
+class CrawlerRunnable(Runnable):
+    def __init__(self, func, args):
+        self.func = func
+        self.args = args
+
+    def run(self):
+        self.func(*self.args)
