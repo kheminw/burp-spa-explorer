@@ -85,9 +85,7 @@ class BurpExtender(IBurpExtender, ITab):
         self.optionsPanel.setLayout(
             BoxLayout(self.optionsPanel, BoxLayout.LINE_AXIS))
 
-        # Button options panel :    [Add]
-        #                           [Edit]
-        #                           [Remove]
+        # Button options panel :    [Add][Edit][Up][Down][Remove]
 
         self.buttonOptionsPanel = JPanel()
         self.buttonOptionsPanel.setLayout(
@@ -98,6 +96,14 @@ class BurpExtender(IBurpExtender, ITab):
 
         self.editRegexButton = JButton('Edit', actionPerformed=self.editRegex)
         self.buttonOptionsPanel.add(self.editRegexButton)
+
+        self.moveRegexUpButton = JButton(
+            'Move up', actionPerformed=self.moveRegexUp)
+        self.buttonOptionsPanel.add(self.moveRegexUpButton)
+
+        self.moveRegexDownButton = JButton(
+            'Move down', actionPerformed=self.moveRegexDown)
+        self.buttonOptionsPanel.add(self.moveRegexDownButton)
 
         self.removeRegexButton = JButton(
             'Remove', actionPerformed=self.removeRegex)
@@ -240,12 +246,30 @@ class BurpExtender(IBurpExtender, ITab):
         dialog.setContentPane(panel)
         self._callbacks.customizeUiComponent(dialog)
         dialog.show()
+        return True
 
+    def moveRegexDown(self, event):
+        idxs = self.regexTable.getSelectedRows()
+        if self.regexTableModel.getRowCount() - 1 in idxs: return False
+
+        self.regexTable.clearSelection()
+        for i in sorted(idxs)[::-1]:
+            self.regexTableModel.moveDown(i)
+            self.regexTable.addRowSelectionInterval(i + 1, i + 1)
+        return True
+
+    def moveRegexUp(self, event):
+        idxs = self.regexTable.getSelectedRows()
+        if 0 in idxs: return False
+
+        self.regexTable.clearSelection()
+        for i in sorted(idxs):
+            self.regexTableModel.moveUp(i)
+            self.regexTable.addRowSelectionInterval(i - 1, i - 1)
         return True
 
     def removeRegex(self, event):
         idx = self.regexTable.getSelectedRows()
-        print(idx)
         for i in sorted(idx)[::-1]:
             self.regexTableModel.removeRow(i)
         return True
@@ -509,6 +533,18 @@ class RegexTableModel(AbstractTableModel):
     def removeRow(self, rowIdx):
         self.data.pop(rowIdx)
         self.fireTableRowsDeleted(rowIdx, rowIdx)
+
+    def moveUp(self, idx):
+        if idx == 0: return False
+        [self.data[idx],
+         self.data[idx - 1]] = [self.data[idx - 1], self.data[idx]]
+        self.fireTableRowsUpdated(idx - 1, idx)
+
+    def moveDown(self, idx):
+        if idx == self.getRowCount() - 1: return False
+        [self.data[idx],
+         self.data[idx + 1]] = [self.data[idx + 1], self.data[idx]]
+        self.fireTableRowsUpdated(idx, idx + 1)
 
 
 class Table(JTable):
