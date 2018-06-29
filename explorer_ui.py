@@ -3,7 +3,9 @@ try:
     from burp import IScannerCheck
     from burp import IExtensionStateListener
     from burp import ITab
-    # from burp import IHttpRequestResponse
+    from burp import IContextMenuFactory
+    from burp import IContextMenuInvocation
+    from burp import IHttpRequestResponse
     # from burp import IScanIssue
     # from array import array
     # from time import sleep
@@ -11,12 +13,14 @@ try:
     from java.lang import Runnable
     from javax.swing import (JTable, JScrollPane, JSplitPane, JButton, JPanel,
                              JTextField, JLabel, SwingConstants, JDialog, Box,
-                             JCheckBox, SwingUtilities, JOptionPane, BoxLayout)
+                             JCheckBox, JMenuItem, SwingUtilities, JOptionPane,
+                             BoxLayout)
 
     from javax.swing.border import EmptyBorder
     from javax.swing.table import AbstractTableModel
     from java.awt import (GridLayout, BorderLayout, FlowLayout, Dimension)
     from java.net import URL
+    from java.util import ArrayList
 
     from threading import Thread, Event
 
@@ -73,14 +77,13 @@ class BurpExtender(IBurpExtender, ITab):
         self.toggleButton = JButton(
             'Start crawling', actionPerformed=self.toggleCrawl)
         self.setupPanel.add(self.toggleButton)
-        
-        self._topPanel.add(self.setupPanel, BorderLayout.PAGE_START)
 
+        self._topPanel.add(self.setupPanel, BorderLayout.PAGE_START)
 
         # Options Panel :    [Buttons]  [          RegEx           ]
         self.optionsPanel = JPanel()
-        self.optionsPanel.setLayout(BoxLayout(self.optionsPanel, BoxLayout.LINE_AXIS))
-
+        self.optionsPanel.setLayout(
+            BoxLayout(self.optionsPanel, BoxLayout.LINE_AXIS))
 
         # Button options panel :    [Add][Edit][Up][Down][Remove]
 
@@ -104,13 +107,10 @@ class BurpExtender(IBurpExtender, ITab):
         self.buttonOptionsPanel.add(self.removeRegexButton)
 
         self.buttonOptionsPanel.add(Box.createVerticalGlue())
-        
 
         self.optionsPanel.add(self.buttonOptionsPanel)
 
-
         self.optionsPanel.add(Box.createHorizontalStrut(20))
-
 
         self.regexTableModel = RegexTableModel([x for x in regex])
         self.regexTable = Table(self.regexTableModel)
@@ -118,24 +118,20 @@ class BurpExtender(IBurpExtender, ITab):
 
         self.optionsPanel.add(self.regexScrollPane)
 
-
         self._topPanel.add(self.optionsPanel, BorderLayout.CENTER)
         self._splitpane.setTopComponent(self._topPanel)
 
-
         # Bottom Panel
-        self._bottomPanel = JPanel(BorderLayout(10,10))
+        self._bottomPanel = JPanel(BorderLayout(10, 10))
         #self._bottomPanel.setLayout(BoxLayout(self._bottomPanel,BoxLayout.PAGE_AXIS))
 
         # Status bar
-        self.crawlStatusPanel = JPanel(FlowLayout(FlowLayout.LEADING,10,10))
+        self.crawlStatusPanel = JPanel(FlowLayout(FlowLayout.LEADING, 10, 10))
 
         self.crawlStatusPanel.add(JLabel("Status: ", SwingConstants.LEFT))
 
         self.crawlStatusLabel = JLabel("Ready to crawl", SwingConstants.LEFT)
         self.crawlStatusPanel.add(self.crawlStatusLabel)
-
-        
 
         # Result Table
         self.resultTableModel = Result([])
@@ -146,17 +142,17 @@ class BurpExtender(IBurpExtender, ITab):
         self._bottomPanel.add(self.resultScrollPane, BorderLayout.CENTER)
         self._bottomPanel.add(self.crawlStatusPanel, BorderLayout.SOUTH)
 
-        
         self._splitpane.setBottomComponent(self._bottomPanel)
         self._splitpane.setDividerLocation(300 +
                                            self._splitpane.getInsets().left)
 
-
-
-
         callbacks.customizeUiComponent(self._splitpane)
 
         callbacks.addSuiteTab(self)
+
+        explorerMenu = ExplorerMenu(self)
+        callbacks.registerContextMenuFactory(explorerMenu)
+        print "SPA Explorer custom menu loaded"
 
         print "Burp SPA Explorer loaded"
 
@@ -182,8 +178,10 @@ class BurpExtender(IBurpExtender, ITab):
         panel.add(crawlField)
 
         def closeDialog(event):
-            if len(nameField.text) == 0 or len(regexField.text) == 0 :
-                JOptionPane.showMessageDialog(self._splitpane, "Name or RegEx can't be empty","Error",JOptionPane.ERROR_MESSAGE)
+            if len(nameField.text) == 0 or len(regexField.text) == 0:
+                JOptionPane.showMessageDialog(
+                    self._splitpane, "Name or RegEx can't be empty", "Error",
+                    JOptionPane.ERROR_MESSAGE)
                 return
             self.regexTableModel.addRow(
                 [nameField.text, regexField.text,
@@ -227,8 +225,10 @@ class BurpExtender(IBurpExtender, ITab):
         panel.add(crawlField)
 
         def closeDialog(event):
-            if len(nameField.text) == 0 or len(regexField.text) == 0 :
-                JOptionPane.showMessageDialog(self._splitpane, "Name or RegEx can't be empty","Error",JOptionPane.ERROR_MESSAGE)
+            if len(nameField.text) == 0 or len(regexField.text) == 0:
+                JOptionPane.showMessageDialog(
+                    self._splitpane, "Name or RegEx can't be empty", "Error",
+                    JOptionPane.ERROR_MESSAGE)
                 return
             self.regexTableModel.editRow(
                 selectedRowIdx,
@@ -285,20 +285,21 @@ class BurpExtender(IBurpExtender, ITab):
 
         host = self.hostField.text
 
-        if host.find("://") == -1 :
+        if host.find("://") == -1:
             host = "http://" + host
 
-        try :
+        try:
             self._callbacks.includeInScope(URL(host))
-        except :
-            JOptionPane.showMessageDialog(self._splitpane, "Can't add host to scope","Error",JOptionPane.ERROR_MESSAGE)
+        except:
+            JOptionPane.showMessageDialog(self._splitpane,
+                                          "Can't add host to scope", "Error",
+                                          JOptionPane.ERROR_MESSAGE)
             return
 
         self.resultTableModel.clearAllRow()
 
         self.crawlingEvent.set()
-        self.crawlerThread = Thread(
-            target=self.crawl_thread, args=(host, ))
+        self.crawlerThread = Thread(target=self.crawl_thread, args=(host, ))
         self.crawlerThread.start()
         print("Started")
 
@@ -324,10 +325,12 @@ class BurpExtender(IBurpExtender, ITab):
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Stop crawling", )))
-        SwingUtilities.invokeLater(CrawlerRunnable(self.addRegexButton.setEnabled, (False, )))
-        SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (False, )))
-        SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (False, )))
-
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.addRegexButton.setEnabled, (False, )))
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.editRegexButton.setEnabled, (False, )))
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.removeRegexButton.setEnabled, (False, )))
 
         pageType = {}  # url -> type
         pageContentHash = {}  # hash -> url list
@@ -341,12 +344,12 @@ class BurpExtender(IBurpExtender, ITab):
             if not self._callbacks.isInScope(url):
                 #self.logger.addRow(url.toString()+" is out of scope")
                 raise ValueError("URL is out of scope")
-            
+
             prot = url.getProtocol()
             host = url.getHost()
             port = url.getPort()
-            if port == -1 : 
-                port = 80 if prot=="http" else 443
+            if port == -1:
+                port = 80 if prot == "http" else 443
 
             httpService = self._helpers.buildHttpService(host, port, prot)
 
@@ -356,7 +359,8 @@ class BurpExtender(IBurpExtender, ITab):
             resp = reqRes.getResponse()
             respInfo = self._helpers.analyzeResponse(resp)
 
-            respBody = self._helpers.bytesToString(resp[respInfo.getBodyOffset():])
+            respBody = self._helpers.bytesToString(
+                resp[respInfo.getBodyOffset():])
             return respBody
 
         def matchRegex(baseURL, res):
@@ -374,12 +378,16 @@ class BurpExtender(IBurpExtender, ITab):
 
                         if url not in pageType:
                             pageType[url] = name
-                            SwingUtilities.invokeLater(CrawlerRunnable(self.resultTableModel.addRow,([name, url], )))
-                            
+                            SwingUtilities.invokeLater(
+                                CrawlerRunnable(self.resultTableModel.addRow,
+                                                ([name, url], )))
+
                             if ret:
                                 toRet.append(url)
                     except:
-                        print("Error when trying to save result ", i, sys.exc_info()[0], sys.exc_info()[1])
+                        print("Error when trying to save result ", i,
+                              sys.exc_info()[0],
+                              sys.exc_info()[1])
             return toRet
 
         def getAllLink(url):
@@ -399,24 +407,27 @@ class BurpExtender(IBurpExtender, ITab):
                     pageContentHash[hash] = [url]
 
                 toRet += matchRegex(url, r)
-            except BaseException as e :
-                print("Error while making request to ", url,e)
-            except :
-                print("Error while making request to ", url, sys.exc_info()[0], sys.exc_info()[1])
+            except BaseException as e:
+                print("Error while making request to ", url, e)
+            except:
+                print("Error while making request to ", url,
+                      sys.exc_info()[0],
+                      sys.exc_info()[1])
             return toRet
-
 
         crawledPage = [host]
         crawledNow = 0
 
-        SwingUtilities.invokeLater(CrawlerRunnable(self.resultTableModel.addRow,(["TARGET",host], )))
-        
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.resultTableModel.addRow,
+                            (["TARGET", host], )))
 
         while crawledNow < len(crawledPage):
             if self.crawlingEvent.is_set():
                 print("Crawling", crawledPage[crawledNow])
                 SwingUtilities.invokeLater(
-                    CrawlerRunnable(self.crawlStatusLabel.setText, ("Crawling "+crawledPage[crawledNow], )))
+                    CrawlerRunnable(self.crawlStatusLabel.setText,
+                                    ("Crawling " + crawledPage[crawledNow], )))
                 for i in getAllLink(crawledPage[crawledNow]):
                     if i not in crawledPage:
                         print("ADD:", i)
@@ -438,7 +449,8 @@ class BurpExtender(IBurpExtender, ITab):
         SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
 
         SwingUtilities.invokeLater(
-            CrawlerRunnable(self.crawlStatusLabel.setText, ("Ready to crawl", )))
+            CrawlerRunnable(self.crawlStatusLabel.setText,
+                            ("Ready to crawl", )))
 
         self.crawlingEvent.clear()
         print("Completed")
@@ -461,7 +473,7 @@ class Result(AbstractTableModel):
         return 2
 
     def getColumnName(self, columnIndex):
-        return ["Name","URL"][columnIndex]
+        return ["Name", "URL"][columnIndex]
 
     def getValueAt(self, rowIndex, columnIndex):
         return self.data[rowIndex][columnIndex]
@@ -480,10 +492,10 @@ class Result(AbstractTableModel):
 
     def clearAllRow(self):
         dataLen = len(self.data)
-        if dataLen == 0 : 
+        if dataLen == 0:
             return
         self.data = []
-        self.fireTableRowsDeleted(0,dataLen-1)
+        self.fireTableRowsDeleted(0, dataLen - 1)
 
 
 class RegexTableModel(AbstractTableModel):
@@ -531,7 +543,7 @@ class RegexTableModel(AbstractTableModel):
 class Table(JTable):
     def __init__(self, model):
         self.setModel(model)
-        
+
     def changeSelection(self, row, col, toggle, extend):
 
         # show the log entry for the selected row
@@ -546,3 +558,36 @@ class CrawlerRunnable(Runnable):
 
     def run(self):
         self.func(*self.args)
+
+
+class ExplorerMenu(IContextMenuFactory):
+    def __init__(self, explorerInstance):
+        self.explorerInstance = explorerInstance
+
+    def createMenuItems(self, contextMenuInvocation):
+        self.contextMenuInvocation = contextMenuInvocation
+        print "Creating Menu"
+        sendToSPAExplorer = JMenuItem(
+            "Send URL to SPA Explorer", actionPerformed=self.getSentUrl)
+        menuItems = ArrayList()
+        menuItems.add(sendToSPAExplorer)
+        return menuItems
+
+    def getSentUrl(self, event):
+        for selectedMessage in self.contextMenuInvocation.getSelectedMessages(
+        ):
+            if (selectedMessage.getHttpService() != None):
+                try:
+                    url = self.explorerInstance._helpers.analyzeRequest(
+                        selectedMessage.getHttpService(),
+                        selectedMessage.getRequest()).getUrl()
+                    print "URL: " + url.toString()
+                    self.explorerInstance.hostField.setText(url.toString())
+                except:
+                    self.explorerInstance._callbacks.issueAlert(
+                        "Cannot get URL from the currently selected message",
+                        sys.exc_info()[0],
+                        sys.exc_info()[1])
+            else:
+                self.explorerInstance._callbacks.issueAlert(
+                    "The selected request is null.")
