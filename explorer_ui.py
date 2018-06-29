@@ -270,7 +270,7 @@ class BurpExtender(IBurpExtender, ITab):
         except :
             JOptionPane.showMessageDialog(self._splitpane, "Can't add host to scope","Error",JOptionPane.ERROR_MESSAGE)
             return
-            
+
         self.resultTableModel.clearAllRow()
 
         self.crawlingEvent.set()
@@ -282,6 +282,10 @@ class BurpExtender(IBurpExtender, ITab):
     def stopCrawling(self, event):
         print("Clear event")
         self.crawlingEvent.clear()
+
+        # Disable button
+        if self.toggleButton.text == "Stop crawling" : # If button is still "Stop crawling" (Thread still running), disable button
+            self.toggleButton.setEnabled(False)
 
     def toggleCrawl(self, event):
         if (self.crawlerThread == None or not self.crawlerThread.is_alive()):
@@ -404,6 +408,8 @@ class BurpExtender(IBurpExtender, ITab):
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Start crawling", )))
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.toggleButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
