@@ -332,6 +332,10 @@ class BurpExtender(IBurpExtender, ITab):
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.editRegexButton.setEnabled, (False, )))
         SwingUtilities.invokeLater(
+            CrawlerRunnable(self.moveRegexUpButton.setEnabled, (False, )))
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.moveRegexDownButton.setEnabled, (False, )))
+        SwingUtilities.invokeLater(
             CrawlerRunnable(self.removeRegexButton.setEnabled, (False, )))
 
         pageType = {}  # url -> type
@@ -450,6 +454,10 @@ class BurpExtender(IBurpExtender, ITab):
             CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.moveRegexUpButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.moveRegexDownButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
 
