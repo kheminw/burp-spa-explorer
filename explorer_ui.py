@@ -280,7 +280,7 @@ class BurpExtender(IBurpExtender, ITab):
         def concatURL(baseURL, link):
             return URL(URL(baseURL), link).toString()
 
-        def makeRequest(self, url):
+        def makeRequest(url):
             url = URL(url)
 
             if not self._callbacks.isInScope(url):
@@ -330,7 +330,7 @@ class BurpExtender(IBurpExtender, ITab):
             toRet = []
             try:
                 print("Making request", url)
-                r = self.makeRequest(url)
+                r = makeRequest(url)
                 print("Done request", len(r))
                 hash = hashlib.sha256(r.encode('utf-8')).hexdigest()
                 #print(r.text)
