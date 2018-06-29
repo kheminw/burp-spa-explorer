@@ -285,6 +285,10 @@ class BurpExtender(IBurpExtender, ITab):
         print("Clear event")
         self.crawlingEvent.clear()
 
+        # Disable button
+        if self.toggleButton.text == "Stop crawling" : # If button is still "Stop crawling" (Thread still running), disable button
+            self.toggleButton.setEnabled(False)
+
     def toggleCrawl(self, event):
         if (self.crawlerThread == None or not self.crawlerThread.is_alive()):
             self.crawl(event)
@@ -417,11 +421,18 @@ class BurpExtender(IBurpExtender, ITab):
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Start crawling", )))
         SwingUtilities.invokeLater(
+<<<<<<< HEAD
             CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
+=======
+            CrawlerRunnable(self.toggleButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
+>>>>>>> 93392dd9643678729cdee564aa22ee92d73b4dcb
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.crawlStatusLabel.setText,
