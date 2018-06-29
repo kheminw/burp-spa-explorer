@@ -136,6 +136,9 @@ class BurpExtender(IBurpExtender, ITab):
         panel.add(crawlField)
 
         def closeDialog(event):
+            if len(nameField.text) == 0 or len(regexField.text) == 0 :
+                JOptionPane.showMessageDialog(self._splitpane, "Name or RegEx can't be empty","Error",JOptionPane.ERROR_MESSAGE)
+                return
             self.regexTableModel.addRow(
                 [nameField.text, regexField.text,
                  crawlField.isSelected()])
@@ -178,6 +181,9 @@ class BurpExtender(IBurpExtender, ITab):
         panel.add(crawlField)
 
         def closeDialog(event):
+            if len(nameField.text) == 0 or len(regexField.text) == 0 :
+                JOptionPane.showMessageDialog(self._splitpane, "Name or RegEx can't be empty","Error",JOptionPane.ERROR_MESSAGE)
+                return
             self.regexTableModel.editRow(
                 selectedRowIdx,
                 [nameField.text, regexField.text,
@@ -211,6 +217,8 @@ class BurpExtender(IBurpExtender, ITab):
 
     def crawl(self, event):
         print("Starting")
+        self._callbacks.includeInScope(URL(self.hostField.text))
+
         self.crawlingEvent.set()
         self.crawlerThread = Thread(
             target=self.crawl_thread, args=(self.hostField.text, ))
@@ -237,6 +245,7 @@ class BurpExtender(IBurpExtender, ITab):
         url = URL(url)
 
         if not self._callbacks.isInScope(url):
+            self.logger.addRow(""+url.toString()+" is out of scope")
             raise ValueError("URL is out of scope")
 
         prot = url.getProtocol()
@@ -267,6 +276,9 @@ class BurpExtender(IBurpExtender, ITab):
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Stop crawling", )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.addRegexButton.setEnabled, (False, )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (False, )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (False, )))
 
         pageType = {}  # url -> type
 
@@ -320,8 +332,10 @@ class BurpExtender(IBurpExtender, ITab):
                     pageContentHash[hash] = [url]
 
                 toRet += matchRegex(url, r)
-            except:
-                print("Error while making request to ", url)
+            except BaseException as e :
+                print("Error while making request to ", url,e)
+            except :
+                print("Error while making request to ", url, "[Unknown error]")
             return toRet
 
         crawledPage = [host]
@@ -352,7 +366,11 @@ class BurpExtender(IBurpExtender, ITab):
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Start crawling", )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
         self.crawlingEvent.clear()
+        self.logger.addRow("Completed")
         print("Completed")
 
 
