@@ -51,6 +51,7 @@ class BurpExtender(IBurpExtender, ITab):
         self._helpers = callbacks.getHelpers()
 
         self.crawlingEvent = Event()
+        self.crawlerThread = None
 
         # main split pane
         self._splitpane = JSplitPane(JSplitPane.VERTICAL_SPLIT)
@@ -97,14 +98,14 @@ class BurpExtender(IBurpExtender, ITab):
 
         self.removeRegexButton = JButton('Remove', actionPerformed=self.removeRegex)
         self.buttonOptionsPanel.add(self.removeRegexButton)
+
+        self.buttonOptionsPanel.add(Box.createVerticalGlue())
         
+
         self.optionsPanel.add(self.buttonOptionsPanel)
 
 
-
         self.optionsPanel.add(Box.createHorizontalStrut(20))
-
-
 
 
         self.regexTableModel = RegexTableModel([x for x in regex])
@@ -119,11 +120,30 @@ class BurpExtender(IBurpExtender, ITab):
 
 
         # Bottom Panel
+        self._bottomPanel = JPanel(BorderLayout(10,10))
+        #self._bottomPanel.setLayout(BoxLayout(self._bottomPanel,BoxLayout.PAGE_AXIS))
 
-        self.logger = Logger([])
-        self.logTable = Table(self.logger)
-        self.scrollPane = JScrollPane(self.logTable)
-        self._splitpane.setBottomComponent(self.scrollPane)
+        # Status bar
+        self.crawlStatusPanel = JPanel(FlowLayout(FlowLayout.LEADING,10,10))
+
+        self.crawlStatusPanel.add(JLabel("Status: ", SwingConstants.LEFT))
+
+        self.crawlStatusLabel = JLabel("Ready to crawl", SwingConstants.LEFT)
+        self.crawlStatusPanel.add(self.crawlStatusLabel)
+
+        
+
+        # Result Table
+        self.resultTableModel = Result([])
+        self.resultTable = Table(self.resultTableModel)
+        self.resultTable.setAutoCreateRowSorter(True)
+        self.resultScrollPane = JScrollPane(self.resultTable)
+
+        self._bottomPanel.add(self.resultScrollPane, BorderLayout.CENTER)
+        self._bottomPanel.add(self.crawlStatusPanel, BorderLayout.SOUTH)
+
+        
+        self._splitpane.setBottomComponent(self._bottomPanel)
         self._splitpane.setDividerLocation(300 +
                                            self._splitpane.getInsets().left)
 
@@ -239,33 +259,41 @@ class BurpExtender(IBurpExtender, ITab):
 
     def crawl(self, event):
         print("Starting")
-        self._callbacks.includeInScope(URL(self.hostField.text))
+
+        host = self.hostField.text
+
+        if host.find("://") == -1 :
+            host = "http://" + host
+
+        try :
+            self._callbacks.includeInScope(URL(host))
+        except :
+            JOptionPane.showMessageDialog(self._splitpane, "Can't add host to scope","Error",JOptionPane.ERROR_MESSAGE)
+            return
+            
+        self.resultTableModel.clearAllRow()
 
         self.crawlingEvent.set()
         self.crawlerThread = Thread(
-            target=self.crawl_thread, args=(self.hostField.text, ))
+            target=self.crawl_thread, args=(host, ))
         self.crawlerThread.start()
         print("Started")
 
     def stopCrawling(self, event):
-        if (self.crawlerThread.is_alive()):
-            print("Stopping...")
-            self.crawlingEvent.clear()
-            self.crawlerThread.join()
-            print("Crawling stopped")
+        print("Clear event")
+        self.crawlingEvent.clear()
 
     def toggleCrawl(self, event):
-        if (self.crawlingEvent.is_set()):
-            self.stopCrawling(event)
-            self.toggleButton.setText("Start crawling")
-        else:
+        if (self.crawlerThread == None or not self.crawlerThread.is_alive()):
             self.crawl(event)
-            self.toggleButton.setText("Stop crawling")
+            #self.toggleButton.setText("Start crawling")
+        else:
+            self.stopCrawling(event)
+            #self.toggleButton.setText("Stop crawling")
 
     def crawl_thread(self, host):
         # print(self, host)
-        print("Hello from thread")
-        self.logger.addRow("Target: " + host)
+        print("Crawl thread started")
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Stop crawling", )))
@@ -284,7 +312,7 @@ class BurpExtender(IBurpExtender, ITab):
             url = URL(url)
 
             if not self._callbacks.isInScope(url):
-                self.logger.addRow(url.toString()+" is out of scope")
+                #self.logger.addRow(url.toString()+" is out of scope")
                 raise ValueError("URL is out of scope")
             
             prot = url.getProtocol()
@@ -319,7 +347,8 @@ class BurpExtender(IBurpExtender, ITab):
 
                         if url not in pageType:
                             pageType[url] = name
-                            self.logger.addRow("Found [" + name + "] " + url)
+                            SwingUtilities.invokeLater(CrawlerRunnable(self.resultTableModel.addRow,([name, url], )))
+                            
                             if ret:
                                 toRet.append(url)
                     except:
@@ -353,10 +382,14 @@ class BurpExtender(IBurpExtender, ITab):
         crawledPage = [host]
         crawledNow = 0
 
+        SwingUtilities.invokeLater(CrawlerRunnable(self.resultTableModel.addRow,(["TARGET",host], )))
+        
+
         while crawledNow < len(crawledPage):
             if self.crawlingEvent.is_set():
                 print("Crawling", crawledPage[crawledNow])
-                self.logger.addRow("Crawling " + crawledPage[crawledNow])
+                SwingUtilities.invokeLater(
+                    CrawlerRunnable(self.crawlStatusLabel.setText, ("Crawling "+crawledPage[crawledNow], )))
                 for i in getAllLink(crawledPage[crawledNow]):
                     if i not in crawledPage:
                         print("ADD:", i)
@@ -375,48 +408,53 @@ class BurpExtender(IBurpExtender, ITab):
         SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
 
+        SwingUtilities.invokeLater(
+            CrawlerRunnable(self.crawlStatusLabel.setText, ("Ready to crawl", )))
+
         self.crawlingEvent.clear()
-        self.logger.addRow("Completed")
         print("Completed")
 
 
-class Logger(AbstractTableModel):
+class Result(AbstractTableModel):
 
     # Implement AbstractTableModel
 
-    def __init__(self, log):
-        self.log = log
+    def __init__(self, result):
+        self.data = result
 
     def getRowCount(self):
         try:
-            return len(self.log)
+            return len(self.data)
         except:
             return 0
 
     def getColumnCount(self):
-        return 1
+        return 2
 
     def getColumnName(self, columnIndex):
-        if columnIndex == 0:
-            return "Result"
-        return "Column " + columnIndex
+        return ["Name","URL"][columnIndex]
 
     def getValueAt(self, rowIndex, columnIndex):
-        logEntry = self.log[rowIndex]
-        # if columnIndex == 0:
-        #     return self._callbacks.getToolName(logEntry._tool)
-        # if columnIndex == 1:
-        #     return logEntry._url.toString()
-        # return ""
-        return str(logEntry)
+        return self.data[rowIndex][columnIndex]
 
     def addRow(self, row):
-        self.log.append(row)
-        self.fireTableRowsInserted(len(self.log) - 1, len(self.log) - 1)
+        self.data.append(row)
+        self.fireTableRowsInserted(len(self.data) - 1, len(self.data) - 1)
 
-    def removeRow(self, row):
-        self.log.pop(row)
-        self.fireTableRowsDeleted(row, row)
+    def editRow(self, rowIdx, row):
+        self.data[rowIdx] = row
+        self.fireTableRowsUpdated(rowIdx, rowIdx)
+
+    def removeRow(self, rowIdx):
+        self.data.pop(rowIdx)
+        self.fireTableRowsDeleted(rowIdx, rowIdx)
+
+    def clearAllRow(self):
+        dataLen = len(self.data)
+        if dataLen == 0 : 
+            return
+        self.data = []
+        self.fireTableRowsDeleted(0,dataLen-1)
 
 
 class RegexTableModel(AbstractTableModel):
@@ -446,15 +484,15 @@ class RegexTableModel(AbstractTableModel):
         self.data[rowIdx] = row
         self.fireTableRowsUpdated(rowIdx, rowIdx)
 
-    def removeRow(self, row):
-        self.data.pop(row)
-        self.fireTableRowsDeleted(row, row)
+    def removeRow(self, rowIdx):
+        self.data.pop(rowIdx)
+        self.fireTableRowsDeleted(rowIdx, rowIdx)
 
 
 class Table(JTable):
     def __init__(self, model):
         self.setModel(model)
-
+        
     def changeSelection(self, row, col, toggle, extend):
 
         # show the log entry for the selected row
