@@ -286,7 +286,7 @@ class BurpExtender(IBurpExtender, ITab):
         self.crawlingEvent.clear()
 
         # Disable button
-        if self.toggleButton.text == "Stop crawling" : # If button is still "Stop crawling" (Thread still running), disable button
+        if self.toggleButton.text == "Stop crawling":  # If button is still "Stop crawling" (Thread still running), disable button
             self.toggleButton.setEnabled(False)
 
     def toggleCrawl(self, event):
@@ -421,18 +421,13 @@ class BurpExtender(IBurpExtender, ITab):
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Start crawling", )))
         SwingUtilities.invokeLater(
-<<<<<<< HEAD
+            CrawlerRunnable(self.toggleButton.setEnabled, (True, )))
+        SwingUtilities.invokeLater(
             CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
-=======
-            CrawlerRunnable(self.toggleButton.setEnabled, (True, )))
-        SwingUtilities.invokeLater(CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
-        SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
-        SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
->>>>>>> 93392dd9643678729cdee564aa22ee92d73b4dcb
 
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.crawlStatusLabel.setText,
@@ -542,7 +537,6 @@ class ExplorerMenu(IContextMenuFactory):
 
     def createMenuItems(self, contextMenuInvocation):
         self.contextMenuInvocation = contextMenuInvocation
-        print "Creating Menu"
         sendToSPAExplorer = JMenuItem(
             "Send URL to SPA Explorer", actionPerformed=self.getSentUrl)
         menuItems = ArrayList()
@@ -561,9 +555,8 @@ class ExplorerMenu(IContextMenuFactory):
                     self.explorerInstance.hostField.setText(url.toString())
                 except:
                     self.explorerInstance._callbacks.issueAlert(
-                        "Cannot get URL from the currently selected message",
-                        sys.exc_info()[0],
-                        sys.exc_info()[1])
+                        "Cannot get URL from the currently selected message " +
+                        str(sys.exc_info()[0]) + " " + str(sys.exc_info()[1]))
             else:
                 self.explorerInstance._callbacks.issueAlert(
                     "The selected request is null.")
