@@ -10,7 +10,7 @@ try:
     from java.io import PrintWriter
     from java.lang import Runnable
     from javax.swing import (JTable, JScrollPane, JSplitPane, JButton, JPanel,
-                             JTextField, JLabel, SwingConstants, JDialog,
+                             JTextField, JLabel, SwingConstants, JDialog, Box,
                              JCheckBox, SwingUtilities, JOptionPane, BoxLayout)
 
     from javax.swing.border import EmptyBorder
@@ -50,44 +50,62 @@ class BurpExtender(IBurpExtender, ITab):
         # self._callbacks.registerExtensionStateListener(self)
         self._helpers = callbacks.getHelpers()
 
+        self.crawlingEvent = Event()
+
         # main split pane
         self._splitpane = JSplitPane(JSplitPane.VERTICAL_SPLIT)
         self._splitpane.setBorder(EmptyBorder(20, 20, 20, 20))
 
         # sub split pane (top)
-
         self._topPanel = JPanel(BorderLayout(10, 10))
         self._topPanel.setBorder(EmptyBorder(0, 0, 10, 0))
 
+        # Setup Panel :    [Target: ] [______________________] [START BUTTON]
         self.setupPanel = JPanel(FlowLayout(FlowLayout.LEADING, 10, 10))
 
-        self.hostField = JTextField('', 50)
         self.setupPanel.add(
             JLabel("Target:", SwingConstants.LEFT), BorderLayout.LINE_START)
-        self.setupPanel.add(self.hostField)
 
-        self.crawlingEvent = Event()
+        self.hostField = JTextField('', 50)
+        self.setupPanel.add(self.hostField)
 
         self.toggleButton = JButton(
             'Start crawling', actionPerformed=self.toggleCrawl)
-
         self.setupPanel.add(self.toggleButton)
+        
         self._topPanel.add(self.setupPanel, BorderLayout.PAGE_START)
 
-        self.optionsPanel = JPanel(GridLayout(0, 2))
+
+        # Options Panel :    [Buttons]  [          RegEx           ]
+        self.optionsPanel = JPanel()
+        self.optionsPanel.setLayout(BoxLayout(self.optionsPanel, BoxLayout.LINE_AXIS))
+
+
+        # Button options panel :    [Add]
+        #                           [Edit]
+        #                           [Remove]
 
         self.buttonOptionsPanel = JPanel()
         self.buttonOptionsPanel.setLayout(
             BoxLayout(self.buttonOptionsPanel, BoxLayout.PAGE_AXIS))
-        self.addRegexButton = JButton('Add', actionPerformed=self.addRegex)
-        self.editRegexButton = JButton('Edit', actionPerformed=self.editRegex)
-        self.removeRegexButton = JButton(
-            'Remove', actionPerformed=self.removeRegex)
-        self.buttonOptionsPanel.add(self.addRegexButton)
-        self.buttonOptionsPanel.add(self.editRegexButton)
-        self.buttonOptionsPanel.add(self.removeRegexButton)
 
+        self.addRegexButton = JButton('Add', actionPerformed=self.addRegex)
+        self.buttonOptionsPanel.add(self.addRegexButton)
+
+        self.editRegexButton = JButton('Edit', actionPerformed=self.editRegex)
+        self.buttonOptionsPanel.add(self.editRegexButton)
+
+        self.removeRegexButton = JButton('Remove', actionPerformed=self.removeRegex)
+        self.buttonOptionsPanel.add(self.removeRegexButton)
+        
         self.optionsPanel.add(self.buttonOptionsPanel)
+
+
+
+        self.optionsPanel.add(Box.createHorizontalStrut(20))
+
+
+
 
         self.regexTableModel = RegexTableModel([x for x in regex])
         self.regexTable = Table(self.regexTableModel)
@@ -95,9 +113,12 @@ class BurpExtender(IBurpExtender, ITab):
 
         self.optionsPanel.add(self.regexScrollPane)
 
-        self._topPanel.add(self.optionsPanel, BorderLayout.CENTER)
 
+        self._topPanel.add(self.optionsPanel, BorderLayout.CENTER)
         self._splitpane.setTopComponent(self._topPanel)
+
+
+        # Bottom Panel
 
         self.logger = Logger([])
         self.logTable = Table(self.logger)
@@ -106,13 +127,14 @@ class BurpExtender(IBurpExtender, ITab):
         self._splitpane.setDividerLocation(300 +
                                            self._splitpane.getInsets().left)
 
-        callbacks.customizeUiComponent(self.scrollPane)
-        callbacks.customizeUiComponent(self.setupPanel)
-        callbacks.customizeUiComponent(self.regexScrollPane)
-        callbacks.addSuiteTab(self)
-        print "Burp SPA Explorer loaded"
 
-        #start_new_thread(self.crawl_thread,('192.168.142.10',3000))
+
+
+        callbacks.customizeUiComponent(self._splitpane)
+
+        callbacks.addSuiteTab(self)
+
+        print "Burp SPA Explorer loaded"
 
     # Button Actions
 
@@ -144,7 +166,7 @@ class BurpExtender(IBurpExtender, ITab):
                  crawlField.isSelected()])
             dialog.hide()
 
-        addButton = JButton('Add', actionPerformed=closeDialog)
+        addButton = JButton('OK', actionPerformed=closeDialog)
         panel.add(addButton)
 
         dialog.setSize(600, 200)
@@ -190,7 +212,7 @@ class BurpExtender(IBurpExtender, ITab):
                  crawlField.isSelected()])
             dialog.hide()
 
-        editButton = JButton('Edit', actionPerformed=closeDialog)
+        editButton = JButton('OK', actionPerformed=closeDialog)
         panel.add(editButton)
 
         dialog.setSize(600, 200)
@@ -240,35 +262,6 @@ class BurpExtender(IBurpExtender, ITab):
             self.crawl(event)
             self.toggleButton.setText("Stop crawling")
 
-    def makeRequest(self, url):
-
-        url = URL(url)
-
-        if not self._callbacks.isInScope(url):
-            self.logger.addRow(""+url.toString()+" is out of scope")
-            raise ValueError("URL is out of scope")
-
-        prot = url.getProtocol()
-        host = url.getHost()
-        port = url.getPort()
-
-        httpService = self._helpers.buildHttpService(host, port, prot)
-
-        #print("Request",prot,host,port)
-
-        reqRes = self._callbacks.makeHttpRequest(
-            httpService, self._helpers.buildHttpRequest(url))
-        self._callbacks.addToSiteMap(reqRes)
-        resp = reqRes.getResponse()
-        respInfo = self._helpers.analyzeResponse(resp)
-
-        respBody = self._helpers.bytesToString(resp[respInfo.getBodyOffset():])
-
-        #resp = 'GG\r\n\r\n'
-        #print("Response",respInfo.getStatusCode(),respBody)
-
-        return respBody
-
     def crawl_thread(self, host):
         # print(self, host)
         print("Hello from thread")
@@ -280,15 +273,36 @@ class BurpExtender(IBurpExtender, ITab):
         SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (False, )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (False, )))
 
-        pageType = {}  # url -> type
 
+        pageType = {}  # url -> type
         pageContentHash = {}  # hash -> url list
 
-        #self.logger.addRow(self.makeRequest(self.hostField.text,int(self.portField.text),'/'))
-
-        # http://192.168.142.10:3000
         def concatURL(baseURL, link):
             return URL(URL(baseURL), link).toString()
+
+        def makeRequest(self, url):
+            url = URL(url)
+
+            if not self._callbacks.isInScope(url):
+                self.logger.addRow(url.toString()+" is out of scope")
+                raise ValueError("URL is out of scope")
+            
+            prot = url.getProtocol()
+            host = url.getHost()
+            port = url.getPort()
+            if port == -1 : 
+                port = 80 if prot=="http" else 443
+
+            httpService = self._helpers.buildHttpService(host, port, prot)
+
+            reqRes = self._callbacks.makeHttpRequest(
+                httpService, self._helpers.buildHttpRequest(url))
+            self._callbacks.addToSiteMap(reqRes)
+            resp = reqRes.getResponse()
+            respInfo = self._helpers.analyzeResponse(resp)
+
+            respBody = self._helpers.bytesToString(resp[respInfo.getBodyOffset():])
+            return respBody
 
         def matchRegex(baseURL, res):
             toRet = []
@@ -296,23 +310,20 @@ class BurpExtender(IBurpExtender, ITab):
                 matchObj = re.findall(regStr, res, re.M | re.I)
                 for i in matchObj:
                     try:
-                        #
-                        #url = concatURL(baseURL,i)
-                        #url = concatURL(host,i)
                         if i.find('http://') == 0 or i.find('https://') == 0:
                             url = i
                         elif i[0] == '/':
                             url = host + i
                         else:
                             url = host + '/' + i
-                        #print(host,i,url)
+
                         if url not in pageType:
                             pageType[url] = name
                             self.logger.addRow("Found [" + name + "] " + url)
                             if ret:
                                 toRet.append(url)
                     except:
-                        print("Some error happened ...")
+                        print("Error when trying to save result ", i, sys.exc_info()[0], sys.exc_info()[1])
             return toRet
 
         def getAllLink(url):
@@ -335,8 +346,9 @@ class BurpExtender(IBurpExtender, ITab):
             except BaseException as e :
                 print("Error while making request to ", url,e)
             except :
-                print("Error while making request to ", url, "[Unknown error]")
+                print("Error while making request to ", url, sys.exc_info()[0], sys.exc_info()[1])
             return toRet
+
 
         crawledPage = [host]
         crawledNow = 0
@@ -357,18 +369,12 @@ class BurpExtender(IBurpExtender, ITab):
         print(crawledNow, crawledPage)
         output = []
 
-        # for i in pageType:
-        #    output.append((pageType[i], i))
-
-        # for i in sorted(output):
-        #     self.logger.addRow(i[0] + " " + i[1])
-        #     pass
-
         SwingUtilities.invokeLater(
             CrawlerRunnable(self.toggleButton.setText, ("Start crawling", )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.addRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.editRegexButton.setEnabled, (True, )))
         SwingUtilities.invokeLater(CrawlerRunnable(self.removeRegexButton.setEnabled, (True, )))
+
         self.crawlingEvent.clear()
         self.logger.addRow("Completed")
         print("Completed")
