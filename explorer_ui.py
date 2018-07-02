@@ -14,20 +14,29 @@ try:
     from javax.swing import (JTable, JScrollPane, JSplitPane, JButton, JPanel,
                              JTextField, JLabel, SwingConstants, JDialog, Box,
                              JCheckBox, JMenuItem, SwingUtilities, JOptionPane,
-                             BoxLayout)
+                             BoxLayout, JPopupMenu)
 
     from javax.swing.border import EmptyBorder
     from javax.swing.table import AbstractTableModel
-    from java.awt import (GridLayout, BorderLayout, FlowLayout, Dimension)
+    from java.awt import (GridLayout, BorderLayout, FlowLayout, Dimension, Point)
     from java.net import URL
     from java.util import ArrayList
 
     from threading import Thread, Event
 
+    import sys
+    import os
+    from java.lang import System
+
+    sys.path.append(os.path.dirname(os.path.realpath('testselenium.jar')) + '/testselenium.jar')
+
+    from testselenium import Test
+
     import re
     import hashlib
 
-except ImportError:
+except ImportError as e:
+    print e
     print "Failed to load dependencies. This issue maybe caused by using an unstable Jython version."
 
 VERSION = '0.1'
@@ -142,6 +151,23 @@ class BurpExtender(IBurpExtender, ITab):
         self.resultTable.setAutoCreateRowSorter(True)
         self.resultScrollPane = JScrollPane(self.resultTable)
 
+        # Result Table popup menu
+        def selectWhenRightClickEvent(event) :
+            def select(e) :
+                rowAtPoint = self.resultTable.rowAtPoint(SwingUtilities.convertPoint(self.resultTablePopupMenu, Point(0, 0), self.resultTable))
+                if rowAtPoint > -1 :
+                    self.resultTable.setRowSelectionInterval(rowAtPoint, rowAtPoint)
+            SwingUtilities.invokeLater(CrawlerRunnable(select, (event,)))
+
+        self.resultTablePopupMenu = JPopupMenu(popupMenuWillBecomeVisible = selectWhenRightClickEvent)
+        self.resultTablePopupMenu.add(JMenuItem("Send to scanner", actionPerformed = self.sendToScanner))
+        self.resultTablePopupMenu.add(JMenuItem("Send to repeater", actionPerformed = self.sendToRepeater))
+        self.resultTablePopupMenu.add(JMenuItem("Send to intruder", actionPerformed = self.sendToIntruder))
+        self.resultTablePopupMenu.add(JMenuItem("Send to spider", actionPerformed = self.sendToSpider))
+
+        self.resultTable.setComponentPopupMenu(self.resultTablePopupMenu)
+
+
         self._bottomPanel.add(self.resultScrollPane, BorderLayout.CENTER)
         self._bottomPanel.add(self.crawlStatusPanel, BorderLayout.SOUTH)
 
@@ -157,9 +183,39 @@ class BurpExtender(IBurpExtender, ITab):
         callbacks.registerContextMenuFactory(explorerMenu)
         print "SPA Explorer custom menu loaded"
 
+        print "Loading chrome driver"
+        #a = Test(os.path.dirname(os.path.realpath('selenium-client.jar')) + '/chromedriver.exe')
+        print "Chrome driver started"
+
         print "Burp SPA Explorer loaded"
 
     # Button Actions
+
+    def getURLComponents(self, url) :
+        return (
+            url.getHost(),
+            (443 if url.getProtocol() == 'https' else 80) if url.getPort() == -1 else url.getPort(),
+            url.getProtocol() == 'https'
+        )
+
+    def sendToScanner(self, event) :
+        url = URL(self.resultTable.getValueAt(self.resultTable.getSelectedRow(),1))
+        urlComp = self.getURLComponents(url)
+        self._callbacks.doActiveScan(urlComp[0], urlComp[1], urlComp[2], self._helpers.buildHttpRequest(url))
+
+    def sendToRepeater(self, event) :
+        url = URL(self.resultTable.getValueAt(self.resultTable.getSelectedRow(),1))
+        urlComp = self.getURLComponents(url)
+        self._callbacks.sendToRepeater(urlComp[0], urlComp[1], urlComp[2], self._helpers.buildHttpRequest(url), None)
+
+    def sendToIntruder(self, event) :
+        url = URL(self.resultTable.getValueAt(self.resultTable.getSelectedRow(),1))
+        urlComp = self.getURLComponents(url)
+        self._callbacks.sendToIntruder(urlComp[0], urlComp[1], urlComp[2], self._helpers.buildHttpRequest(url))
+
+    def sendToSpider(self, event) :
+        url = URL(self.resultTable.getValueAt(self.resultTable.getSelectedRow(),1))
+        self._callbacks.sendToSpider(url)
 
     def addRegex(self, event):
         optionPane = JOptionPane()
