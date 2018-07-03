@@ -28,9 +28,9 @@ try:
     import os
     from java.lang import System
 
-    sys.path.append(os.path.dirname(os.path.realpath('testselenium.jar')) + '/testselenium.jar')
+    #sys.path.append(os.path.dirname(os.path.realpath('testselenium.jar')) + '/testselenium.jar')
 
-    from testselenium import Test
+    #from testselenium import Test
 
     import re
     import hashlib
@@ -183,9 +183,9 @@ class BurpExtender(IBurpExtender, ITab):
         callbacks.registerContextMenuFactory(explorerMenu)
         print "SPA Explorer custom menu loaded"
 
-        print "Loading chrome driver"
+        #print "Loading chrome driver"
         #a = Test(os.path.dirname(os.path.realpath('selenium-client.jar')) + '/chromedriver.exe')
-        print "Chrome driver started"
+        #print "Chrome driver started"
 
         print "Burp SPA Explorer loaded"
 
